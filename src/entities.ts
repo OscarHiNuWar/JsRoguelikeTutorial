@@ -1,5 +1,6 @@
 import { BaseAI, HostileEnemy } from "./components/ai";
 import { Fighter } from "./components/fighter";
+import { GameMap } from "./game-map";
 
 export enum RenderOrder {
   Corpse,
@@ -16,8 +17,17 @@ export class Entity {
     public bg: string = "#000",
     public name: string = "<Unnamed>",
     public blocksMovement: boolean = false,
-    public renderOrder: RenderOrder = RenderOrder.Corpse
-  ) {}
+    public renderOrder: RenderOrder = RenderOrder.Corpse,
+    public parent: GameMap | null = null
+  ) {
+    if (this.parent) {
+      this.parent.entities.push(this);
+    }
+  }
+
+  public get gameMap(): GameMap | undefined {
+    return this.parent?.gameMap;
+  }
 
   move(dx: number, dy: number) {
     this.x += dx;
@@ -34,10 +44,11 @@ export class Actor extends Entity {
     public bg: string = "#000",
     public name: string = "<Unnamed>",
     public ai: BaseAI | null,
-    public fighter: Fighter
+    public fighter: Fighter,
+    public parent: GameMap | null = null
   ) {
-    super(x, y, char, fg, bg, name, true, RenderOrder.Actor);
-    this.fighter.entity = this;
+    super(x, y, char, fg, bg, name, true, RenderOrder.Actor, parent);
+    this.fighter.parent = this;
   }
 
   public get isAlive(): boolean {
@@ -45,7 +56,11 @@ export class Actor extends Entity {
   }
 }
 
-export function spawnPlayer(x: number, y: number): Actor {
+export function spawnPlayer(
+  x: number,
+  y: number,
+  gameMap: GameMap | null = null
+): Actor {
   return new Actor(
     x,
     y,
@@ -54,11 +69,12 @@ export function spawnPlayer(x: number, y: number): Actor {
     "#000",
     "Player",
     null,
-    new Fighter(30, 2, 4)
+    new Fighter(30, 2, 4),
+    gameMap
   );
 }
 
-export function spawnOrc(x: number, y: number): Actor {
+export function spawnOrc(gameMap: GameMap, x: number, y: number): Entity {
   return new Actor(
     x,
     y,
@@ -67,11 +83,12 @@ export function spawnOrc(x: number, y: number): Actor {
     "#000",
     "Orc",
     new HostileEnemy(),
-    new Fighter(10, 1, 3)
+    new Fighter(10, 1, 3),
+    gameMap
   );
 }
 
-export function spawnTroll(x: number, y: number): Actor {
+export function spawnTroll(gameMap: GameMap, x: number, y: number): Entity {
   return new Actor(
     x,
     y,
@@ -80,6 +97,7 @@ export function spawnTroll(x: number, y: number): Actor {
     "#000",
     "Troll",
     new HostileEnemy(),
-    new Fighter(16, 1, 4)
+    new Fighter(16, 1, 4),
+    gameMap
   );
 }

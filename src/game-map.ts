@@ -23,6 +23,11 @@ export class GameMap {
       this.tiles[y] = row;
     }
   }
+
+  public get gameMap(): GameMap {
+    return this;
+  }
+
   public get actors(): Actor[] {
     return this.entities
       .filter((e) => e instanceof Actor)
@@ -30,22 +35,18 @@ export class GameMap {
       .filter((a) => a.isAlive);
   }
 
-  getActorAtLocation(x: number, y: number): Actor | undefined {
-    return this.actors.find((a) => a.x === x && a.y === y);
-  }
-
   isInBounds(x: number, y: number) {
     return 0 <= x && x < this.width && 0 <= y && y < this.height;
-  }
-
-  public get nonPlayerEntities(): Entity[] {
-    return this.entities.filter((e) => e.name !== "Player");
   }
 
   getBlockingEntityAtLocation(x: number, y: number): Entity | undefined {
     return this.entities.find(
       (e) => e.blocksMovement && e.x === x && e.y === y
     );
+  }
+
+  getActorAtLocation(x: number, y: number): Actor | undefined {
+    return this.actors.find((a) => a.x === x && a.y === y);
   }
 
   addRoom(x: number, y: number, roomTiles: Tile[][]) {
@@ -86,6 +87,7 @@ export class GameMap {
       const row = this.tiles[y];
       for (let x = 0; x < row.length; x++) {
         const tile = row[x];
+
         let char = " ";
         let fg = "#fff";
         let bg = "#000";
