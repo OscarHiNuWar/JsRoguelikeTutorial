@@ -1,9 +1,8 @@
 import * as ROT from "rot-js";
-import { Actor, Entity } from "./entities";
-
 import type { Tile } from "./tile-types";
 import { WALL_TILE } from "./tile-types";
 import { Display } from "rot-js";
+import { Actor, Entity, Item } from "./entities";
 
 export class GameMap {
   tiles: Tile[][];
@@ -33,6 +32,17 @@ export class GameMap {
       .filter((e) => e instanceof Actor)
       .map((e) => e as Actor)
       .filter((a) => a.isAlive);
+  }
+
+  public get items(): Item[] {
+    return this.entities.filter((e) => e instanceof Item).map((e) => e as Item);
+  }
+
+  removeEntity(entity: Entity) {
+    const index = this.entities.indexOf(entity);
+    if (index >= 0) {
+      this.entities.splice(index, 1);
+    }
   }
 
   isInBounds(x: number, y: number) {

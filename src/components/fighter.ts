@@ -60,4 +60,8 @@ export class Fighter extends BaseComponent {
 
     return amountRecovered;
   }
+
+  takeDamage(amount: number) {
+    this.hp -= amount;
+  }
 }

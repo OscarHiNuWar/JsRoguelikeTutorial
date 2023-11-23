@@ -2,18 +2,6 @@ import { Display } from "rot-js";
 
 import { Colors } from "./colors";
 
-function drawColoredBar(
-  display: Display,
-  x: number,
-  y: number,
-  width: number,
-  color: Colors
-) {
-  for (let pos = x; pos < x + width; pos++) {
-    display.draw(pos, y, " ", color, color);
-  }
-}
-
 export function renderHealthBar(
   display: Display,
   currentValue: number,
@@ -32,6 +20,18 @@ export function renderHealthBar(
   }
 }
 
+function drawColoredBar(
+  display: Display,
+  x: number,
+  y: number,
+  width: number,
+  color: Colors
+) {
+  for (let pos = x; pos < x + width; pos++) {
+    display.draw(pos, y, " ", color, color);
+  }
+}
+
 export function renderNamesAtLocation(x: number, y: number) {
   const [mouseX, mouseY] = window.engine.mousePosition;
   if (
@@ -39,7 +39,7 @@ export function renderNamesAtLocation(x: number, y: number) {
     window.engine.gameMap.tiles[mouseY][mouseX].visible
   ) {
     const names = window.engine.gameMap.entities
-      .filter((e) => e.x == mouseX && e.y === mouseY)
+      .filter((e) => e.x === mouseX && e.y === mouseY)
       .map((e) => e.name.charAt(0).toUpperCase() + e.name.substring(1))
       .join(", ");
 

@@ -1,6 +1,10 @@
 import * as ROT from "rot-js";
 
-import { handleGameInput, handleLogInput } from "./input-handler";
+import {
+  BaseInputHandler,
+  GameInputHandler,
+  InputState,
+} from "./input-handler";
 import { Actor } from "./entities";
 import { GameMap } from "./game-map";
 import { generateDungeon } from "./procgen";
@@ -11,6 +15,7 @@ import {
 } from "./components/render-functions";
 import { MessageLog } from "./components/message-log";
 import { Colors } from "./components/colors";
+import { Action } from "./actions";
 
 export class Engine {
   public static readonly WIDTH = 80;
@@ -21,13 +26,14 @@ export class Engine {
   public static readonly MAX_ROOM_SIZE = 10;
   public static readonly MAX_ROOMS = 30;
   public static readonly MAX_MONSTERS_PER_ROOM = 2;
+  public static readonly MAX_ITEMS_PER_ROOM = 2;
 
   display: ROT.Display;
   gameMap: GameMap;
   messageLog: MessageLog;
   mousePosition: [number, number];
-  _state: EngineState;
   logCursorPosition: number;
+  inputHandler: BaseInputHandler;
 
   constructor(public player: Actor) {
     this.display = new ROT.Display({
@@ -35,7 +41,6 @@ export class Engine {
       height: Engine.HEIGHT,
       forceSquareRatio: true,
     });
-    this._state = EngineState.Game;
     this.mousePosition = [0, 0];
     const container = this.display.getContainer()!;
     this.logCursorPosition = 0;
@@ -47,6 +52,8 @@ export class Engine {
       Colors.WelcomeText
     );
 
+    this.inputHandler = new GameInputHandler();
+
     this.gameMap = generateDungeon(
       Engine.MAP_WIDTH,
       Engine.MAP_HEIGHT,
@@ -54,6 +61,7 @@ export class Engine {
       Engine.MIN_ROOM_SIZE,
       Engine.MAX_ROOM_SIZE,
       Engine.MAX_MONSTERS_PER_ROOM,
+      Engine.MAX_ITEMS_PER_ROOM,
       player,
       this.display
     );
@@ -70,67 +78,29 @@ export class Engine {
     this.gameMap.updateFov(this.player);
   }
 
-  public get state() {
-    return this._state;
-  }
-
-  public set state(value) {
-    this._state = value;
-    this.logCursorPosition = this.messageLog.messages.length - 1;
-  }
-
   handleEnemyTurns() {
     this.gameMap.actors.forEach((e) => {
       if (e.isAlive) {
-        e.ai?.perform(e);
+        try {
+          e.ai?.perform(e);
+        } catch {}
       }
     });
   }
 
   update(event: KeyboardEvent) {
-    if (this.state === EngineState.Game) {
-      this.processGameLoop(event);
-    } else if (this.state === EngineState.Log) {
-      this.processLogLoop(event);
+    const action = this.inputHandler.handleKeyboardInput(event);
+    if (action instanceof Action) {
+      try {
+        action.perform(this.player);
+        this.handleEnemyTurns();
+        this.gameMap.updateFov(this.player);
+      } catch {}
     }
+
+    this.inputHandler = this.inputHandler.nextHandler;
 
     this.render();
-  }
-
-  processGameLoop(event: KeyboardEvent) {
-    if (this.player.fighter.hp > 0) {
-      const action = handleGameInput(event);
-
-      if (action) {
-        action.perform(this.player);
-
-        if (this.state === EngineState.Game) {
-          this.handleEnemyTurns();
-        }
-      }
-    }
-
-    this.gameMap.updateFov(this.player);
-  }
-
-  processLogLoop(event: KeyboardEvent) {
-    const scrollAmount = handleLogInput(event);
-    if (scrollAmount < 0 && this.logCursorPosition === 0) {
-      this.logCursorPosition = this.messageLog.messages.length - 1;
-    } else if (
-      scrollAmount > 0 &&
-      this.logCursorPosition === this.messageLog.messages.length - 1
-    ) {
-      this.logCursorPosition = 0;
-    } else {
-      this.logCursorPosition = Math.max(
-        0,
-        Math.min(
-          this.logCursorPosition + scrollAmount,
-          this.messageLog.messages.length - 1
-        )
-      );
-    }
   }
 
   render() {
@@ -148,8 +118,8 @@ export class Engine {
 
     this.gameMap.render();
 
-    if (this.state === EngineState.Log) {
-      renderFrameWithTitle(3, 3, 74, 38, "Test Frame");
+    if (this.inputHandler.inputState === InputState.Log) {
+      renderFrameWithTitle(3, 3, 74, 38, "Message History");
       this.messageLog.renderMessages(
         this.display,
         4,
@@ -159,11 +129,30 @@ export class Engine {
         this.messageLog.messages.slice(0, this.logCursorPosition + 1)
       );
     }
+    if (this.inputHandler.inputState === InputState.UseInventory) {
+      this.renderInventory("Select an item to use");
+    }
+    if (this.inputHandler.inputState === InputState.DropInventory) {
+      this.renderInventory("Select an item to drop");
+    }
   }
-}
 
-export enum EngineState {
-  Game,
-  Dead,
-  Log,
+  renderInventory(title: string) {
+    const itemCount = this.player.inventory.items.length;
+    const height = itemCount + 2 <= 3 ? 3 : itemCount + 2;
+    const width = title.length + 4;
+    const x = this.player.x <= 30 ? 40 : 0;
+    const y = 0;
+
+    renderFrameWithTitle(x, y, width, height, title);
+
+    if (itemCount > 0) {
+      this.player.inventory.items.forEach((i, index) => {
+        const key = String.fromCharCode("a".charCodeAt(0) + index);
+        this.display.drawText(x + 1, y + index + 1, `(${key}) ${i.name}`);
+      });
+    } else {
+      this.display.drawText(x + 1, y + 1, "(Empty)");
+    }
+  }
 }

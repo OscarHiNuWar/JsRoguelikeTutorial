@@ -1,12 +1,12 @@
 import { GameMap } from "./game-map";
 import { FLOOR_TILE, WALL_TILE, Tile } from "./tile-types";
 import { Display } from "rot-js";
-import { Entity, spawnOrc, spawnTroll } from "./entities";
+import { Entity, spawnHealthPotion, spawnOrc, spawnTroll } from "./entities";
 
 interface Bounds {
   x1: number;
-  x2: number;
   y1: number;
+  x2: number;
   y2: number;
 }
 
@@ -21,15 +21,6 @@ class RectangularRoom {
   ) {
     this.tiles = new Array(this.height);
     this.buildRoom();
-  }
-
-  get bounds(): Bounds {
-    return {
-      x1: this.x,
-      y1: this.y,
-      x2: this.x + this.width - 1,
-      y2: this.y + this.height - 1,
-    };
   }
 
   buildRoom() {
@@ -50,6 +41,15 @@ class RectangularRoom {
     return [centerX, centerY];
   }
 
+  get bounds(): Bounds {
+    return {
+      x1: this.x,
+      y1: this.y,
+      x2: this.x + this.width - 1,
+      y2: this.y + this.height - 1,
+    };
+  }
+
   intersects(other: RectangularRoom): boolean {
     return (
       this.x <= other.x + other.width &&
@@ -63,11 +63,14 @@ class RectangularRoom {
 function placeEntities(
   room: RectangularRoom,
   dungeon: GameMap,
-  maxMonsters: number
+  maxMonsters: number,
+  maxItems: number
 ) {
   const numberOfMonstersToAdd = generateRandomNumber(0, maxMonsters);
+  const numberOfItemsToAdd = generateRandomNumber(0, maxItems);
+  const bounds = room.bounds;
+
   for (let i = 0; i < numberOfMonstersToAdd; i++) {
-    const bounds = room.bounds;
     const x = generateRandomNumber(bounds.x1 + 1, bounds.x2 - 1);
     const y = generateRandomNumber(bounds.y1 + 1, bounds.y2 - 1);
 
@@ -79,6 +82,15 @@ function placeEntities(
       }
     }
   }
+
+  for (let i = 0; i < numberOfItemsToAdd; i++) {
+    const x = generateRandomNumber(bounds.x1 + 1, bounds.x2 - 1);
+    const y = generateRandomNumber(bounds.y1 + 1, bounds.y2 - 1);
+
+    if (!dungeon.entities.some((e) => e.x == x && e.y == y)) {
+      spawnHealthPotion(dungeon, x, y);
+    }
+  }
 }
 
 export function generateDungeon(
@@ -88,6 +100,7 @@ export function generateDungeon(
   minSize: number,
   maxSize: number,
   maxMonsters: number,
+  maxItems: number,
   player: Entity,
   display: Display
 ): GameMap {
@@ -109,7 +122,9 @@ export function generateDungeon(
     }
 
     dungeon.addRoom(x, y, newRoom.tiles);
-    placeEntities(newRoom, dungeon, maxMonsters);
+
+    placeEntities(newRoom, dungeon, maxMonsters, maxItems);
+
     rooms.push(newRoom);
   }
 
@@ -147,7 +162,6 @@ function* connectRooms(
   // set our axisIndex to 0 (x axis) if horizontal or 1 (y axis) if vertical
   let axisIndex = horizontal ? 0 : 1;
 
-  //console.log(current, end);
   // we'll loop until our current is the same as the end point
   while (current[0] !== end[0] || current[1] !== end[1]) {
     //are we tunneling in the positive or negative direction?
