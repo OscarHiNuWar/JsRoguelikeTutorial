@@ -1,25 +1,34 @@
 import * as ROT from "rot-js";
 
-import { Action, MeleeAction, MovementAction, WaitAction } from "../actions";
+import {
+  Action,
+  BumpAction,
+  MeleeAction,
+  MovementAction,
+  WaitAction,
+} from "../actions";
+import { generateRandomNumber } from "../procgen";
 
 import { Actor, Entity } from "../entities";
 
 export abstract class BaseAI implements Action {
   path: [number, number][];
 
-  constructor() {
+  protected constructor() {
     this.path = [];
   }
 
-  perform(_entity: Entity) {}
+  abstract perform(entity: Entity): void;
 
   /**
+   * Compute and return a path to the target position.
+   *
+   * If there is no valid path then return an empty list.
    *
    * @param destX
    * @param destY
    * @param entity
    */
-
   calculatePathTo(destX: number, destY: number, entity: Entity) {
     const isPassable = (x: number, y: number) =>
       window.engine.gameMap.tiles[y][x].walkable;
@@ -30,7 +39,6 @@ export abstract class BaseAI implements Action {
     dijkstra.compute(entity.x, entity.y, (x: number, y: number) => {
       this.path.push([x, y]);
     });
-
     this.path.shift();
   }
 }
@@ -38,7 +46,6 @@ export abstract class BaseAI implements Action {
 export class HostileEnemy extends BaseAI {
   constructor() {
     super();
-    this.path = [];
   }
 
   perform(entity: Entity) {
@@ -63,5 +70,38 @@ export class HostileEnemy extends BaseAI {
     }
 
     return new WaitAction().perform(entity);
+  }
+}
+
+const directions: [number, number][] = [
+  [-1, -1], // Northwest
+  [0, -1], // North
+  [1, -1], // Northeast
+  [-1, 0], // West
+  [1, 0], // East
+  [-1, 1], // Southwest
+  [0, 1], // South
+  [1, 1], // Southeast
+];
+
+export class ConfusedEnemy extends BaseAI {
+  constructor(public previousAi: BaseAI | null, public turnsRemaining: number) {
+    super();
+  }
+
+  perform(entity: Entity) {
+    const actor = entity as Actor;
+    if (!actor) return;
+
+    if (this.turnsRemaining <= 0) {
+      window.messageLog.addMessage(`The ${entity.name} is no longer confused.`);
+      actor.ai = this.previousAi;
+    } else {
+      const [directionX, directionY] =
+        directions[generateRandomNumber(0, directions.length)];
+      this.turnsRemaining -= 1;
+      const action = new BumpAction(directionX, directionY);
+      action.perform(entity);
+    }
   }
 }

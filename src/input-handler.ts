@@ -8,6 +8,8 @@ import {
   WaitAction,
 } from "./actions";
 import { Colors } from "./components/colors";
+import { Engine } from "./engine";
+import { Display } from "rot-js";
 
 interface LogMap {
   [key: string]: number;
@@ -23,64 +25,72 @@ export enum InputState {
   Log,
   UseInventory,
   DropInventory,
+  Target,
 }
 
 export abstract class BaseInputHandler {
   nextHandler: BaseInputHandler;
+  mousePosition: [number, number];
+  logCursorPosition: number;
   protected constructor(public inputState: InputState = InputState.Game) {
     this.nextHandler = this;
+    this.mousePosition = [0, 0];
+    this.logCursorPosition = window.messageLog.messages.length - 1;
   }
 
   abstract handleKeyboardInput(event: KeyboardEvent): Action | null;
+
+  onRender(_display: Display) {}
+
+  handleMouseMovement(position: [number, number]) {
+    this.mousePosition = position;
+  }
 }
 
 interface DirectionMap {
   [key: string]: [number, number];
 }
 
+const MOVE_KEYS: DirectionMap = {
+  // Arrow Keys
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  Home: [-1, -1],
+  End: [-1, 1],
+  PageUp: [1, -1],
+  PageDown: [1, 1],
+  // Numpad Keys
+  1: [-1, 1],
+  2: [0, 1],
+  3: [1, 1],
+  4: [-1, 0],
+  6: [1, 0],
+  7: [-1, -1],
+  8: [0, -1],
+  9: [1, -1],
+  // Vi keys
+  h: [-1, 0],
+  j: [0, 1],
+  k: [0, -1],
+  l: [1, 0],
+  y: [-1, -1],
+  u: [1, -1],
+  b: [-1, 1],
+  n: [1, 1],
+  // UI keys
+};
+
 export class GameInputHandler extends BaseInputHandler {
-  MOVE_KEYS: DirectionMap;
   constructor() {
     super();
-    this.MOVE_KEYS = {
-      // Arrow Keys
-      ArrowUp: [0, -1],
-      ArrowDown: [0, 1],
-      ArrowLeft: [-1, 0],
-      ArrowRight: [1, 0],
-      Home: [-1, -1],
-      End: [-1, 1],
-      PageUp: [1, -1],
-      PageDown: [1, 1],
-      // Numpad Keys
-      1: [-1, 1],
-      2: [0, 1],
-      3: [1, 1],
-      4: [-1, 0],
-      6: [1, 0],
-      7: [-1, -1],
-      8: [0, -1],
-      9: [1, -1],
-      // Vi keys
-      h: [-1, 0],
-      j: [0, 1],
-      k: [0, -1],
-      l: [1, 0],
-      y: [-1, -1],
-      u: [1, -1],
-      b: [-1, 1],
-      n: [1, 1],
-      // UI keys
-      // g: new PickupAction(),
-      // i: new InventoryAction(true),
-      // d: new InventoryAction(false),
-    };
   }
 
   handleKeyboardInput(event: KeyboardEvent): Action | null {
     if (window.engine.player.fighter.hp > 0) {
-      if (event.key in this.MOVE_KEYS) {
-        const [dx, dy] = this.MOVE_KEYS[event.key];
+      if (event.key in MOVE_KEYS) {
+        const [dx, dy] = MOVE_KEYS[event.key];
         return new BumpAction(dx, dy);
       }
       if (event.key === "v") {
@@ -98,6 +108,9 @@ export class GameInputHandler extends BaseInputHandler {
       if (event.key === "d") {
         this.nextHandler = new InventoryInputHandler(InputState.DropInventory);
       }
+      if (event.key === "/") {
+        this.nextHandler = new LookHandler();
+      }
     }
 
     return null;
@@ -111,13 +124,11 @@ export class LogInputHandler extends BaseInputHandler {
 
   handleKeyboardInput(event: KeyboardEvent): Action | null {
     if (event.key === "Home") {
-      return new LogAction(() => (window.engine.logCursorPosition = 0));
+      return new LogAction(() => (this.logCursorPosition = 0));
     }
     if (event.key === "End") {
       return new LogAction(
-        () =>
-          (window.engine.logCursorPosition =
-            window.engine.messageLog.messages.length - 1)
+        () => (this.logCursorPosition = window.messageLog.messages.length - 1)
       );
     }
 
@@ -128,21 +139,19 @@ export class LogInputHandler extends BaseInputHandler {
     }
 
     return new LogAction(() => {
-      if (scrollAmount < 0 && window.engine.logCursorPosition === 0) {
-        window.engine.logCursorPosition =
-          window.engine.messageLog.messages.length - 1;
+      if (scrollAmount < 0 && this.logCursorPosition === 0) {
+        this.logCursorPosition = window.messageLog.messages.length - 1;
       } else if (
         scrollAmount > 0 &&
-        window.engine.logCursorPosition ===
-          window.engine.messageLog.messages.length - 1
+        this.logCursorPosition === window.messageLog.messages.length - 1
       ) {
-        window.engine.logCursorPosition = 0;
+        this.logCursorPosition = 0;
       } else {
-        window.engine.logCursorPosition = Math.max(
+        this.logCursorPosition = Math.max(
           0,
           Math.min(
-            window.engine.logCursorPosition + scrollAmount,
-            window.engine.messageLog.messages.length - 1
+            this.logCursorPosition + scrollAmount,
+            window.messageLog.messages.length - 1
           )
         );
       }
@@ -170,12 +179,95 @@ export class InventoryInputHandler extends BaseInputHandler {
             return new DropItem(item);
           }
         } else {
-          window.engine.messageLog.addMessage("Invalid entry.", Colors.Invalid);
+          window.messageLog.addMessage("Invalid entry.", Colors.Invalid);
           return null;
         }
       }
     }
     this.nextHandler = new GameInputHandler();
     return null;
+  }
+}
+
+export abstract class SelectIndexHandler extends BaseInputHandler {
+  protected constructor() {
+    super(InputState.Target);
+    const { x, y } = window.engine.player;
+    this.mousePosition = [x, y];
+  }
+
+  handleKeyboardInput(event: KeyboardEvent): Action | null {
+    if (event.key in MOVE_KEYS) {
+      const moveAmount = MOVE_KEYS[event.key];
+      let modifier = 1;
+      if (event.shiftKey) modifier = 5;
+      if (event.ctrlKey) modifier = 10;
+      if (event.altKey) modifier = 20;
+
+      let [x, y] = this.mousePosition;
+      const [dx, dy] = moveAmount;
+      x += dx * modifier;
+      y += dy * modifier;
+      x = Math.max(0, Math.min(x, Engine.MAP_WIDTH - 1));
+      y = Math.max(0, Math.min(y, Engine.MAP_HEIGHT - 1));
+      this.mousePosition = [x, y];
+      return null;
+    } else if (event.key === "Enter") {
+      let [x, y] = this.mousePosition;
+      return this.onIndexSelected(x, y);
+    }
+
+    this.nextHandler = new GameInputHandler();
+    return null;
+  }
+
+  abstract onIndexSelected(x: number, y: number): Action | null;
+}
+
+export class LookHandler extends SelectIndexHandler {
+  constructor() {
+    super();
+  }
+
+  onIndexSelected(_x: number, _y: number): Action | null {
+    this.nextHandler = new GameInputHandler();
+    return null;
+  }
+}
+
+type ActionCallback = (x: number, y: number) => Action | null;
+
+export class SingleRangedAttackHandler extends SelectIndexHandler {
+  constructor(public callback: ActionCallback) {
+    super();
+  }
+
+  onIndexSelected(x: number, y: number): Action | null {
+    this.nextHandler = new GameInputHandler();
+    return this.callback(x, y);
+  }
+}
+
+export class AreaRangedAttackHandler extends SelectIndexHandler {
+  constructor(public radius: number, public callback: ActionCallback) {
+    super();
+  }
+
+  onRender(display: Display) {
+    const startX = this.mousePosition[0] - this.radius - 1;
+    const startY = this.mousePosition[1] - this.radius - 1;
+
+    for (let x = startX; x < startX + this.radius ** 2; x++) {
+      for (let y = startY; y < startY + this.radius ** 2; y++) {
+        //const data = display._data[`${x},${y}`];
+        //const char = data ? data[2] || " " : " ";
+        display.drawOver(x, y, null, "#fff", "#f00");
+      }
+    }
+  }
+
+  onIndexSelected(x: number, y: number): Action | null {
+    this.nextHandler = new GameInputHandler();
+    return this.callback(x, y);
   }
 }

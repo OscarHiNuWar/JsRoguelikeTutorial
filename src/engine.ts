@@ -16,6 +16,7 @@ import {
 import { MessageLog } from "./components/message-log";
 import { Colors } from "./components/colors";
 import { Action } from "./actions";
+import { ImpossibleException } from "./components/exceptions";
 
 export class Engine {
   public static readonly WIDTH = 80;
@@ -31,8 +32,7 @@ export class Engine {
   display: ROT.Display;
   gameMap: GameMap;
   messageLog: MessageLog;
-  mousePosition: [number, number];
-  logCursorPosition: number;
+
   inputHandler: BaseInputHandler;
 
   constructor(public player: Actor) {
@@ -41,9 +41,9 @@ export class Engine {
       height: Engine.HEIGHT,
       forceSquareRatio: true,
     });
-    this.mousePosition = [0, 0];
+    this.inputHandler.mousePosition = [0, 0];
     const container = this.display.getContainer()!;
-    this.logCursorPosition = 0;
+    this.inputHandler.logCursorPosition = 0;
     document.body.appendChild(container);
 
     this.messageLog = new MessageLog();
@@ -71,7 +71,9 @@ export class Engine {
     });
 
     window.addEventListener("mousemove", (event) => {
-      this.mousePosition = this.display.eventToPosition(event);
+      this.inputHandler.handleMouseMovement(
+        this.display.eventToPosition(event)
+      );
       this.render();
     });
 
@@ -95,7 +97,11 @@ export class Engine {
         action.perform(this.player);
         this.handleEnemyTurns();
         this.gameMap.updateFov(this.player);
-      } catch {}
+      } catch (error) {
+        if (error instanceof ImpossibleException) {
+          this.messageLog.addMessage(error.message, Colors.Impossible);
+        }
+      }
     }
 
     this.inputHandler = this.inputHandler.nextHandler;
@@ -114,7 +120,7 @@ export class Engine {
       20
     );
 
-    renderNamesAtLocation(21, 44);
+    renderNamesAtLocation(21, 44, this.inputHandler.mousePosition);
 
     this.gameMap.render();
 
@@ -126,7 +132,10 @@ export class Engine {
         4,
         72,
         36,
-        this.messageLog.messages.slice(0, this.logCursorPosition + 1)
+        this.messageLog.messages.slice(
+          0,
+          this.inputHandler.logCursorPosition + 1
+        )
       );
     }
     if (this.inputHandler.inputState === InputState.UseInventory) {
@@ -135,6 +144,14 @@ export class Engine {
     if (this.inputHandler.inputState === InputState.DropInventory) {
       this.renderInventory("Select an item to drop");
     }
+    if (this.inputHandler.inputState === InputState.Target) {
+      const [x, y] = this.inputHandler.mousePosition;
+      const data = this.display._data[`${x},${y}`];
+      const char = data ? data[2] || " " : " ";
+      this.display.drawOver(x, y, char[0], "#000", "#fff");
+    }
+
+    this.inputHandler.onRender(this.display);
   }
 
   renderInventory(title: string) {
